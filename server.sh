@@ -10,16 +10,14 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC
 
 # ── 安全读取输入（从终端读，不受管道/stdin影响）────────────────────────────
 r() {
-    local prompt="$1" var="$2" val
-    # 优先从 /dev/tty 读（交互式终端）
-    if [ -c /dev/tty ] 2>/dev/null; then
-        read -p "$prompt" val < /dev/tty
+    local prompt="$1" var="$2"
+    # tty -s 为真时才有终端可交互，从 /dev/tty 读
+    # 否则从当前 stdin 读（兼容管道）
+    if tty -s 2>/dev/null; then
+        read -p "$prompt" "$var" < /dev/tty
     else
-        # 无 tty 时从当前 stdin 读
-        read -p "$prompt" val
+        read -p "$prompt" "$var"
     fi
-    # 把读到的值赋给调用者的变量
-    printf -v "$var" "%s" "$val"
 }
 
 cls() { [[ -t 1 ]] && clear; :; }
