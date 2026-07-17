@@ -11,7 +11,8 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC
 # ── 安全读取输入（从终端读，不受管道/stdin影响）────────────────────────────
 r() {
     local prompt="$1" var="$2"
-    read -p "$prompt" "$var"
+    echo -n -e "$prompt"
+    read "$var"
 }
 
 cls() { [[ -t 1 ]] && clear; :; }
