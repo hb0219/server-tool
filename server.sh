@@ -4,7 +4,7 @@
 #  GitHub: https://github.com/hb0219/server-tool
 #  用法: bash <(curl -sL https://raw.githubusercontent.com/hb0219/server-tool/main/server.sh)
 #===============================================================================
-set -e
+# set -e (禁用，用显式错误处理)
 [[ $EUID -eq 0 ]] || { echo "请用 root 运行"; exit 1; }
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -12,7 +12,7 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC
 # ── 安全读取输入（兼容管道、无 TTY 环境）────────────────────────────────────
 r() {
     local prompt="$1" var="$2"
-    if [ -c /dev/tty ]; then
+    if tty -s 2>/dev/null && [ -c /dev/tty ] 2>/dev/null; then
         read -p "$prompt" "$var" < /dev/tty
     else
         read -p "$prompt" "$var"
