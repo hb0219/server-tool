@@ -76,7 +76,7 @@ tcp_tune() {
     echo "  2) 深度优化 (CN2 GIA / 9929 / CMIN2)"
     echo "  3) 恢复默认"
     echo "  0) 返回"
-    read -p "  选择 [0-3]: " opt
+    read -p "  选择 [0-3]: " opt < /dev/tty
     case $opt in
         1) cat > /etc/sysctl.d/99-bbr.conf <<< $'net.core.default_qdisc=fq\nnet.ipv4.tcp_congestion_control=bbr'
            sysctl -p /etc/sysctl.d/99-bbr.conf &>/dev/null; echo -e "${GREEN}✅ BBR已启用${NC}" ;;
@@ -111,7 +111,7 @@ hardening() {
     echo "  4) 开启自动安全更新"
     echo "  5) 全部执行"
     echo "  0) 返回"
-    read -p "  选择 [0-5]: " opt
+    read -p "  选择 [0-5]: " opt < /dev/tty
     case $opt in
         1) cat >> /etc/sysctl.d/99-security.conf <<< $'net.ipv4.icmp_echo_ignore_all=1\nnet.ipv6.conf.all.disable_ipv6=1\nnet.ipv4.tcp_timestamps=0'
            sysctl -p /etc/sysctl.d/99-security.conf &>/dev/null; echo -e "${GREEN}✅ 已禁用 ping / IPv6 / 时间戳${NC}" ;;
@@ -143,7 +143,7 @@ clean_up() {
     echo "  3) 清理 journal 日志"
     echo "  4) 全部清理"
     echo "  0) 返回"
-    read -p "  选择 [0-4]: " opt
+    read -p "  选择 [0-4]: " opt < /dev/tty
     case $opt in
         1) apt-get clean &>/dev/null; apt autoremove --purge -y &>/dev/null; echo -e "${GREEN}✅ apt已清理${NC}" ;;
         2) dpkg -l | grep linux-image | grep -v $(uname -r) | awk '{print $2}' | xargs -r dpkg --purge &>/dev/null
@@ -169,7 +169,7 @@ net_tools() {
     echo "  4) 本机监听端口"
     echo "  5) DNS 泄露检测"
     echo "  0) 返回"
-    read -p "  选择 [0-5]: " opt
+    read -p "  选择 [0-5]: " opt < /dev/tty
     case $opt in
         1) command -v speedtest-cli &>/dev/null || pip3 install speedtest-cli -q &>/dev/null
            speedtest-cli --simple 2>/dev/null || echo -e "${RED}测速失败${NC}" ;;
@@ -197,7 +197,7 @@ service_status() {
         ((i++))
     done
     echo "  0) 返回"
-    read -p "  选择查看状态 [0-${#list[@]}]: " n
+    read -p "  选择查看状态 [0-${#list[@]}]: " n < /dev/tty
     [[ "$n" == "0" ]] && return
     local idx=$((n-1))
     [[ -z "${list[$idx]}" ]] && return
@@ -236,7 +236,7 @@ while true; do
     echo -e "  ${GREEN}8${NC})  关于"
     echo -e "  ${GREEN}0${NC})  退出"
     echo ""
-    read -p "  请输入数字选择 [0-8]: " ch
+    read -p "  请输入数字选择 [0-8]: " ch < /dev/tty
     case $ch in
         1) sys_info ;; 2) security ;; 3) tcp_tune ;;
         4) hardening ;; 5) clean_up ;; 6) net_tools ;;
