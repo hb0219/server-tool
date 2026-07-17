@@ -4,22 +4,26 @@
 #  GitHub: https://github.com/hb0219/server-tool
 #  用法: bash <(curl -sL https://raw.githubusercontent.com/hb0219/server-tool/main/server.sh)
 #===============================================================================
-# set -e (禁用，用显式错误处理)
 [[ $EUID -eq 0 ]] || { echo "请用 root 运行"; exit 1; }
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
-# ── 安全读取输入（兼容管道、无 TTY 环境）────────────────────────────────────
+# ── 安全读取输入（从终端读，不受管道/stdin影响）────────────────────────────
 r() {
-    local prompt="$1" var="$2"
-    if tty -s 2>/dev/null && [ -c /dev/tty ] 2>/dev/null; then
-        read -p "$prompt" "$var" < /dev/tty
+    local prompt="$1" var="$2" val
+    # 优先从 /dev/tty 读（交互式终端）
+    if [ -c /dev/tty ] 2>/dev/null; then
+        read -p "$prompt" val < /dev/tty
     else
-        read -p "$prompt" "$var"
+        # 无 tty 时从当前 stdin 读
+        read -p "$prompt" val
     fi
+    # 把读到的值赋给调用者的变量
+    printf -v "$var" "%s" "$val"
 }
 
 cls() { [[ -t 1 ]] && clear; :; }
+
 SSH_PORT=$(ss -tlnp 2>/dev/null | grep sshd | head -1 | awk '{print $4}' | cut -d: -f2)
 SSH_PORT=${SSH_PORT:-22}
 
@@ -88,9 +92,10 @@ tcp_tune() {
     echo "  0) 返回"
     r "  选择 [0-3]: " opt
     case $opt in
-        1) echo -e "net.core.default_qdisc=fq\nnet.ipv4.tcp_congestion_control=bbr" > /etc/sysctl.d/99-bbr.conf
-           sysctl -p /etc/sysctl.d/99-bbr.conf &>/dev/null; echo -e "${GREEN}✅ BBR 已启用${NC}" ;;
-        2) cat > /etc/sysctl.d/99-tcp.conf <<-EOF
+        1) echo "net.core.default_qdisc=fq" > /etc/sysctl.d/99-bbr.conf
+           echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.d/99-bbr.conf
+           sysctl -p /etc/sysctl.d/99-bbr.conf &>/dev/null && echo -e "${GREEN}✅ BBR 已启用${NC}" ;;
+        2) cat > /etc/sysctl.d/99-tcp.conf << 'TCPEOF'
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
 net.ipv4.tcp_fastopen=3
@@ -102,10 +107,11 @@ net.ipv4.tcp_mtu_probing=1
 net.ipv4.tcp_fin_timeout=15
 net.ipv4.tcp_tw_reuse=1
 net.core.somaxconn=65535
-EOF
-           sysctl -p /etc/sysctl.d/99-tcp.conf &>/dev/null; echo -e "${GREEN}✅ 深度优化完成${NC}" ;;
+TCPEOF
+           sysctl -p /etc/sysctl.d/99-tcp.conf &>/dev/null && echo -e "${GREEN}✅ 深度优化完成${NC}" ;;
         3) rm -f /etc/sysctl.d/99-bbr.conf /etc/sysctl.d/99-tcp.conf &>/dev/null
-           sysctl -w net.ipv4.tcp_congestion_control=cubic &>/dev/null; echo -e "${GREEN}✅ 已恢复默认${NC}" ;;
+           sysctl -w net.ipv4.tcp_congestion_control=cubic &>/dev/null
+           echo -e "${GREEN}✅ 已恢复默认${NC}" ;;
     esac
     footer
 }
@@ -123,12 +129,12 @@ hardening() {
     r "  选择 [0-5]: " opt
     case $opt in
         1) printf 'net.ipv4.icmp_echo_ignore_all=1\nnet.ipv6.conf.all.disable_ipv6=1\nnet.ipv4.tcp_timestamps=0\n' >> /etc/sysctl.d/99-security.conf
-           sysctl -p /etc/sysctl.d/99-security.conf &>/dev/null; echo -e "${GREEN}✅ 已禁用${NC}" ;;
-        2) apt-get install -y -qq fail2ban &>/dev/null; systemctl restart fail2ban &>/dev/null; echo -e "${GREEN}✅ fail2ban 已安装${NC}" ;;
+           sysctl -p /etc/sysctl.d/99-security.conf &>/dev/null && echo -e "${GREEN}✅ 已禁用${NC}" ;;
+        2) apt-get install -y -qq fail2ban &>/dev/null && systemctl restart fail2ban &>/dev/null && echo -e "${GREEN}✅ fail2ban 已安装${NC}" ;;
         3) mkdir -p /etc/systemd/resolved.conf.d
            printf '[Resolve]\nDNS=1.1.1.1#cloudflare-dns.com 8.8.8.8#dns.google\nDNSOverTLS=yes\nLLMNR=no\nMulticastDNS=no\n' > /etc/systemd/resolved.conf.d/dns-over-tls.conf
-           systemctl restart systemd-resolved &>/dev/null; echo -e "${GREEN}✅ DNS over TLS 已配置${NC}" ;;
-        4) apt-get install -y -qq unattended-upgrades &>/dev/null; echo -e "${GREEN}✅ 自动更新已开启${NC}" ;;
+           systemctl restart systemd-resolved &>/dev/null && echo -e "${GREEN}✅ DNS over TLS 已配置${NC}" ;;
+        4) apt-get install -y -qq unattended-upgrades &>/dev/null && echo -e "${GREEN}✅ 自动更新已开启${NC}" ;;
         5) apt-get install -y -qq fail2ban unattended-upgrades &>/dev/null
            printf 'net.ipv4.icmp_echo_ignore_all=1\nnet.ipv6.conf.all.disable_ipv6=1\nnet.ipv4.tcp_timestamps=0\nnet.ipv4.conf.all.rp_filter=1\nnet.ipv4.conf.all.accept_redirects=0\n' >> /etc/sysctl.d/99-security.conf
            sysctl -p /etc/sysctl.d/99-security.conf &>/dev/null
@@ -152,9 +158,8 @@ clean_up() {
     r "  选择 [0-4]: " opt
     case $opt in
         1) apt-get clean -qq &>/dev/null; apt autoremove --purge -y -qq &>/dev/null; echo -e "${GREEN}✅ apt 已清理${NC}" ;;
-        2) dpkg -l | grep linux-image | grep -v $(uname -r) | awk '{print $2}' | xargs -r dpkg --purge &>/dev/null
-           echo -e "${GREEN}✅ 旧内核已清理${NC}" ;;
-        3) journalctl --vacuum-size=50M &>/dev/null; echo -e "${GREEN}✅ journal 已清理${NC}" ;;
+        2) dpkg -l | grep linux-image | grep -v $(uname -r) | awk '{print $2}' | xargs -r dpkg --purge &>/dev/null && echo -e "${GREEN}✅ 旧内核已清理${NC}" ;;
+        3) journalctl --vacuum-size=50M &>/dev/null && echo -e "${GREEN}✅ journal 已清理${NC}" ;;
         4) apt-get clean -qq &>/dev/null; apt autoremove --purge -y -qq &>/dev/null
            dpkg -l | grep linux-image | grep -v $(uname -r) | awk '{print $2}' | xargs -r dpkg --purge &>/dev/null
            journalctl --vacuum-size=50M &>/dev/null; rm -rf /tmp/* /var/tmp/* &>/dev/null || true
@@ -205,7 +210,7 @@ service_status() {
     local idx=$((n-1)); [[ -z "${list[$idx]}" ]] && return
     systemctl status "${list[$idx]}" --no-pager -n 10 2>/dev/null | head -15
     echo ""; r "  [r]重启 [s]停止 [其他]返回: " a
-    case $a in r) systemctl restart "${list[$idx]}" &>/dev/null && echo -e "${GREEN}已重启${NC}";; s) systemctl stop "${list[$idx]}" &>/dev/null && echo -e "${GREEN}已停止${NC}";; esac
+    case $a in r|R) systemctl restart "${list[$idx]}" &>/dev/null && echo -e "${GREEN}已重启${NC}";; s|S) systemctl stop "${list[$idx]}" &>/dev/null && echo -e "${GREEN}已停止${NC}";; esac
     footer
 }
 
