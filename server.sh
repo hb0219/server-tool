@@ -4,6 +4,10 @@
 #  GitHub: https://github.com/hb0219/server-tool
 #  用法: bash <(curl -sL https://raw.githubusercontent.com/hb0219/server-tool/main/server.sh)
 #===============================================================================
+
+# 强制从终端读取输入（兼容 pipe 和 process substitution）
+exec < /dev/tty 2>/dev/null || true
+
 [[ $EUID -eq 0 ]] || { echo "请用 root 运行"; exit 1; }
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -11,13 +15,7 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC
 # ── 安全读取输入（从终端读，不受管道/stdin影响）────────────────────────────
 r() {
     local prompt="$1" var="$2"
-    # tty -s 为真时才有终端可交互，从 /dev/tty 读
-    # 否则从当前 stdin 读（兼容管道）
-    if tty -s 2>/dev/null; then
-        read -p "$prompt" "$var" < /dev/tty
-    else
-        read -p "$prompt" "$var"
-    fi
+    read -p "$prompt" "$var"
 }
 
 cls() { [[ -t 1 ]] && clear; :; }
