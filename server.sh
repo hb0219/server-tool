@@ -1,322 +1,247 @@
 #!/usr/bin/env bash
 #===============================================================================
 #  🇺🇳 Server Pro Menus  —  多功能 VPS 管理脚本
-#  用法: bash <(curl -sL https://raw.githubusercontent.com/你的用户名/你的仓库/main/server.sh)
+#  用法: bash <(curl -sL https://raw.githubusercontent.com/hb0219/server-tool/main/server.sh)
 #===============================================================================
 set -e
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+[[ $EUID -eq 0 ]] || { echo "请用 root 运行"; exit 1; }
 
-# ── 检测系统 ─────────────────────────────────────────────────────────────────
-check_root() { [[ $EUID -eq 0 ]] || { echo -e "${RED}✘ 请用 root 运行${NC}"; exit 1; }; }
-get_os() { . /etc/os-release 2>/dev/null; echo "$ID $VERSION_ID"; }
-get_ip()  { curl -4s --connect-timeout 5 https://ipinfo.io/ip 2>/dev/null || hostname -I | awk '{print $1}'; }
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
+SSH_PORT=$(ss -tlnp 2>/dev/null | grep sshd | head -1 | awk '{print $4}' | cut -d: -f2)
+SSH_PORT=${SSH_PORT:-22}
 
-# ── 菜单框架 ─────────────────────────────────────────────────────────────────
-menu_header() {
-    clear
-    echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║       🇺🇳 Server Pro Menus  v1.0        ║${NC}"
-    echo -e "${GREEN}╠══════════════════════════════════════════╣${NC}"
-    echo -e "${GREEN}║  $(hostname)  |  $(get_ip)${NC}"
-    echo -e "${GREEN}║  $(get_os)  |  正常运行 $(($(awk '{print $1}' /proc/uptime)/86400))天${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════════╝${NC}"
+cls() { [[ -t 1 ]] && clear; :; }
+
+header() {
+    cls
+    echo -e "${GREEN}┌─────────────────────────────────────────────────────┐${NC}"
+    echo -e "${GREEN}│         🇺🇳  Server Pro Menus  v1.0                │${NC}"
+    echo -e "${GREEN}├─────────────────────────────────────────────────────┤${NC}"
+    echo -e "${GREEN}│  $(hostname) │${NC}"
+    echo -e "${GREEN}│  IP: $(curl -4s --connect-timeout 3 https://ipinfo.io/ip 2>/dev/null || echo 'N/A') │${NC}"
+    echo -e "${GREEN}│  OS: $(. /etc/os-release 2>/dev/null; echo "$PRETTY_NAME" 2>/dev/null || cat /etc/os-release 2>/dev/null | head -1)${NC}"
+    echo -e "${GREEN}└─────────────────────────────────────────────────────┘${NC}"
     echo ""
 }
 
-menu_footer() { echo ""; read -p "按回车返回主菜单..."; }
+footer() { echo ""; read -p "  按回车返回主菜单..."; }
 
-# ── 工具函数 ─────────────────────────────────────────────────────────────────
-run_cmd() { echo -e "${YELLOW}▶ $*${NC}"; eval "$*"; }
-
-confirm() { read -p "$1 [y/N]: " c; [[ "$c" =~ ^[Yy]$ ]]; }
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  1. 系统信息
-# ═══════════════════════════════════════════════════════════════════════════════
+# ── 1. 系统信息 ──────────────────────────────────────────────────────────────
 sys_info() {
-    menu_header
-    echo -e " ${YELLOW}━━━ 系统信息 ━━━${NC}"
-    echo "  主机名:   $(hostname)"
-    echo "  系统版本: $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"')"
-    echo "  内核版本: $(uname -r)"
-    echo "  运行时长: $(uptime -p)"
+    header
+    echo -e " ${CYAN}—————————————————— 系统信息 ——————————————————${NC}"
+    printf "  主机名:    %s\n" "$(hostname)"
+    printf "  系统版本:  %s\n" "$(. /etc/os-release 2>/dev/null; echo "$PRETTY_NAME")"
+    printf "  内核版本:  %s\n" "$(uname -r)"
+    printf "  运行时长:  %s\n" "$(uptime -p 2>/dev/null || uptime)"
     echo ""
-    echo -e " ${YELLOW}━━━ 硬件信息 ━━━${NC}"
-    echo "  CPU:      $(lscpu 2>/dev/null | grep 'Model name' | cut -d: -f2 | xargs || echo 'N/A')"
-    echo "  核心数:   $(nproc) 核心"
-    echo "  内存:     $(free -h | awk '/^Mem/{print $3 \"/\" $2}')"
-    echo "  交换区:   $(free -h | awk '/^Swap/{print $3 \"/\" $2}')"
-    echo "  磁盘:     $(df -h / | awk 'NR==2{print $3 \"/\" $2 \" (\" $5 \")\"}')"
+    echo -e " ${CYAN}—————————————————— 硬件信息 ——————————————————${NC}"
+    printf "  CPU:       %s\n" "$(lscpu 2>/dev/null | grep 'Model name' | cut -d: -f2 | xargs | head -c 50 || echo 'N/A')"
+    printf "  核心数:    %s\n" "$(nproc) 核心"
+    printf "  内存:      %s\n" "$(free -h | awk '/^Mem/{print $3"/"$2}')"
+    printf "  交换区:    %s\n" "$(free -h | awk '/^Swap/{print $3"/"$2}')"
+    printf "  磁盘:      %s\n" "$(df -h / | awk 'NR==2{print $3"/"$2" ("$5")"}')"
     echo ""
-    echo -e " ${YELLOW}━━━ 网络信息 ━━━${NC}"
-    echo "  IPv4:     $(get_ip)"
-    echo "  IPv6:     $(ip -6 addr show | grep 'global' | awk '{print $2}' | cut -d/ -f1 | head -1 || echo '无')"
-    echo "  ASN:      $(curl -s --connect-timeout 5 https://ipinfo.io/org 2>/dev/null || echo 'N/A')"
-    echo "  BBR:       $(lsmod 2>/dev/null | grep -q bbr && echo '启用 ✅' || echo '未启用')"
-    menu_footer
+    echo -e " ${CYAN}—————————————————— 网络信息 ——————————————————${NC}"
+    printf "  IPv4:      %s\n" "$(curl -4s --connect-timeout 3 https://ipinfo.io/ip 2>/dev/null || hostname -I | awk '{print $1}')"
+    printf "  IPv6:      %s\n" "$(ip -6 addr show 2>/dev/null | grep 'global' | awk '{print $2}' | cut -d/ -f1 | head -1 || echo '无')"
+    printf "  ASN:       %s\n" "$(curl -4s --connect-timeout 3 https://ipinfo.io/org 2>/dev/null || echo 'N/A')"
+    printf "  BBR:       %s\n" "$(lsmod 2>/dev/null | grep -q bbr && echo '✅ 已启用' || echo '❌ 未启用')"
+    printf "  SSH端口:   %s\n" "$SSH_PORT"
+    footer
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  2. 安全检测
-# ═══════════════════════════════════════════════════════════════════════════════
-security_check() {
-    menu_header
-    echo -e " ${YELLOW}━━━ 安全检测 ━━━${NC}"
-    local issues=0
-    # SSH 端口
-    local ssh_port=$(ss -tlnp | grep sshd | head -1 | awk '{print $4}' | cut -d: -f2)
-    if [[ "$ssh_port" == "22" ]]; then
-        echo -e "  ${RED}⚠  SSH 使用默认端口 22，建议改${NC}"; ((issues++))
-    else
-        echo -e "  ${GREEN}✅ SSH 端口: $ssh_port${NC}"
-    fi
-    # 密码登录
-    if grep -q 'PasswordAuthentication yes' /etc/ssh/sshd_config 2>/dev/null; then
-        echo -e "  ${YELLOW}⚠  SSH 允许密码登录，建议禁用${NC}"; ((issues++))
-    else
-        echo -e "  ${GREEN}✅ SSH 已禁用密码登录${NC}"
-    fi
-    # Ping
-    if [[ $(cat /proc/sys/net/ipv4/icmp_echo_ignore_all 2>/dev/null) == "1" ]]; then
-        echo -e "  ${GREEN}✅ Ping 已禁用${NC}"
-    else
-        echo -e "  ${YELLOW}⚠  Ping 未禁用${NC}"; ((issues++))
-    fi
-    # 防火墙
-    if command -v nft &>/dev/null; then
-        echo -e "  ${GREEN}✅ nftables${NC}"
-    elif command -v iptables &>/dev/null; then
-        echo -e "  ${GREEN}✅ iptables${NC}"
-    else
-        echo -e "  ${YELLOW}⚠  无防火墙${NC}"; ((issues++))
-    fi
-    # fail2ban
-    if systemctl is-active fail2ban &>/dev/null; then
-        echo -e "  ${GREEN}✅ fail2ban 运行中${NC}"
-    else
-        echo -e "  ${YELLOW}⚠  fail2ban 未运行${NC}"; ((issues++))
-    fi
-    # DNS 加密
-    if resolvectl status 2>/dev/null | grep -q DNSOverTLS; then
-        echo -e "  ${GREEN}✅ DNS over TLS${NC}"
-    else
-        echo -e "  ${YELLOW}⚠  DNS 未加密${NC}"; ((issues++))
-    fi
+# ── 2. 安全检测 ──────────────────────────────────────────────────────────────
+security() {
+    header
+    echo -e " ${CYAN}—————————————————— 安全检测 ——————————————————${NC}"
+    local n=0
+    [[ "$SSH_PORT" != "22" ]] && echo -e "  ✅ SSH端口: $SSH_PORT (非标)" || { echo -e "  ⚠️  SSH使用默认端口22"; ((n++)); }
+    grep -q 'PasswordAuthentication yes' /etc/ssh/sshd_config 2>/dev/null && { echo -e "  ⚠️  SSH允许密码登录"; ((n++)); } || echo -e "  ✅ SSH已禁用密码登录"
+    [[ $(cat /proc/sys/net/ipv4/icmp_echo_ignore_all 2>/dev/null) == "1" ]] && echo -e "  ✅ Ping已禁" || { echo -e "  ⚠️  Ping未禁"; ((n++)); }
+    systemctl is-active fail2ban &>/dev/null && echo -e "  ✅ fail2ban运行中" || { echo -e "  ⚠️  fail2ban未运行"; ((n++)); }
+    resolvectl status 2>/dev/null | grep -q DNSOverTLS && echo -e "  ✅ DNS加密(DoT)" || { echo -e "  ⚠️  DNS未加密"; ((n++)); }
     echo ""
-    if [[ $issues -eq 0 ]]; then echo -e "  ${GREEN}🎉 全部安全，优秀！${NC}"
-    else echo -e "  ${YELLOW}发现 $issues 项可优化${NC}"; fi
-    menu_footer
+    [[ $n -eq 0 ]] && echo -e "${GREEN}  🎉 全部安全！${NC}" || echo -e "${YELLOW}  ⚠️  发现 $n 项待优化${NC}"
+    footer
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  3. TCP 调优
-# ═══════════════════════════════════════════════════════════════════════════════
+# ── 3. TCP调优 ───────────────────────────────────────────────────────────────
 tcp_tune() {
-    menu_header
-    echo -e " ${YELLOW}━━━ TCP 调优 ━━━${NC}"
-    echo "  当前拥塞算法: $(sysctl net.ipv4.tcp_congestion_control 2>/dev/null | awk '{print $3}')"
-    echo "  当前队列算法: $(sysctl net.core.default_qdisc 2>/dev/null | awk '{print $3}')"
+    header
+    echo -e " ${CYAN}—————————————————— TCP 调优 ——————————————————${NC}"
+    echo -e "  当前: $(sysctl net.ipv4.tcp_congestion_control 2>/dev/null | awk '{print $3}') / $(sysctl net.core.default_qdisc 2>/dev/null | awk '{print $3}')"
     echo ""
-    echo "  1) 开启 BBR + fq"
-    echo "  2) 深度优化（CN2 GIA / 9929 / CMIN2 专用）"
+    echo "  1) 启用 BBR"
+    echo "  2) 深度优化 (CN2 GIA / 9929 / CMIN2)"
     echo "  3) 恢复默认"
     echo "  0) 返回"
-    read -p "  请选择 [0-3]: " opt
+    read -p "  选择 [0-3]: " opt
     case $opt in
-        1) echo "net.core.default_qdisc=fq" >> /etc/sysctl.d/99-bbr.conf 2>/dev/null
-           echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.d/99-bbr.conf 2>/dev/null
-           sysctl -p /etc/sysctl.d/99-bbr.conf 2>/dev/null
-           echo -e "${GREEN}✅ BBR 已开启${NC}" ;;
-        2) cat >> /etc/sysctl.d/99-tcp-optimize.conf <<EOF
+        1) cat > /etc/sysctl.d/99-bbr.conf <<< $'net.core.default_qdisc=fq\nnet.ipv4.tcp_congestion_control=bbr'
+           sysctl -p /etc/sysctl.d/99-bbr.conf &>/dev/null; echo -e "${GREEN}✅ BBR已启用${NC}" ;;
+        2) cat > /etc/sysctl.d/99-tcp.conf <<-TCPEOF
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
 net.ipv4.tcp_fastopen=3
 net.core.rmem_max=134217728
 net.core.wmem_max=134217728
-net.ipv4.tcp_rmem=4096 87380 134217728
-net.ipv4.tcp_wmem=4096 65536 134217728
+net.ipv4.tcp_rmem="4096 87380 134217728"
+net.ipv4.tcp_wmem="4096 65536 134217728"
 net.ipv4.tcp_mtu_probing=1
 net.ipv4.tcp_fin_timeout=15
 net.ipv4.tcp_tw_reuse=1
 net.core.somaxconn=65535
-net.ipv4.tcp_notsent_lowat=131072
-EOF
-           sysctl -p /etc/sysctl.d/99-tcp-optimize.conf 2>/dev/null
-           echo -e "${GREEN}✅ 深度优化完成${NC}" ;;
-        3) rm -f /etc/sysctl.d/99-bbr.conf /etc/sysctl.d/99-tcp-optimize.conf 2>/dev/null
-           sysctl -w net.ipv4.tcp_congestion_control=cubic 2>/dev/null
-           echo -e "${GREEN}✅ 已恢复默认${NC}" ;;
+TCPEOF
+           sysctl -p /etc/sysctl.d/99-tcp.conf &>/dev/null; echo -e "${GREEN}✅ 深度优化完成${NC}" ;;
+        3) rm -f /etc/sysctl.d/99-bbr.conf /etc/sysctl.d/99-tcp.conf &>/dev/null
+           sysctl -w net.ipv4.tcp_congestion_control=cubic &>/dev/null; echo -e "${GREEN}✅ 已恢复默认${NC}" ;;
         0) return ;;
     esac
-    menu_footer
+    footer
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  4. 一键安全加固
-# ═══════════════════════════════════════════════════════════════════════════════
+# ── 4. 一键加固 ──────────────────────────────────────────────────────────────
 hardening() {
-    menu_header
-    echo -e " ${YELLOW}━━━ 一键安全加固 ━━━${NC}"
-    echo "  将执行以下操作："
-    echo "  • 关闭 ping"
-    echo "  • 关闭 IPv6"
-    echo "  • 关闭 TCP 时间戳"
-    echo "  • 安装 fail2ban"
-    echo "  • 配置 DNS over TLS"
-    echo "  • 开启自动安全更新"
-    echo ""
-    if confirm "确认执行？"; then
-        # 禁 ping
-        echo "net.ipv4.icmp_echo_ignore_all=1" >> /etc/sysctl.d/99-security.conf 2>/dev/null
-        # 关 IPv6
-        echo "net.ipv6.conf.all.disable_ipv6=1" >> /etc/sysctl.d/99-security.conf 2>/dev/null
-        echo "net.ipv6.conf.default.disable_ipv6=1" >> /etc/sysctl.d/99-security.conf 2>/dev/null
-        # 关时间戳
-        echo "net.ipv4.tcp_timestamps=0" >> /etc/sysctl.d/99-security.conf 2>/dev/null
-        # 防 IP 欺骗
-        echo "net.ipv4.conf.all.rp_filter=1" >> /etc/sysctl.d/99-security.conf 2>/dev/null
-        echo "net.ipv4.conf.all.accept_redirects=0" >> /etc/sysctl.d/99-security.conf 2>/dev/null
-        echo "net.ipv4.conf.all.send_redirects=0" >> /etc/sysctl.d/99-security.conf 2>/dev/null
-        sysctl -p /etc/sysctl.d/99-security.conf 2>/dev/null
-        
-        # fail2ban
-        apt-get install -y -qq fail2ban 2>/dev/null
-        systemctl restart fail2ban 2>/dev/null
-        
-        # DNS over TLS
-        mkdir -p /etc/systemd/resolved.conf.d/
-        cat > /etc/systemd/resolved.conf.d/dns-over-tls.conf <<DNSEOF
-[Resolve]
-DNS=8.8.8.8#dns.google 1.1.1.1#cloudflare-dns.com
-DNSOverTLS=yes
-LLMNR=no
-MulticastDNS=no
-DNSEOF
-        systemctl restart systemd-resolved 2>/dev/null
-        
-        # 自动更新
-        apt-get install -y -qq unattended-upgrades 2>/dev/null
-        echo -e "${GREEN}✅ 安全加固完成！${NC}"
-    fi
-    menu_footer
+    header
+    echo -e " ${CYAN}—————————————————— 一键安全加固 ——————————————————${NC}"
+    echo "  1) 禁用 ping + 关 IPv6 + 关时间戳"
+    echo "  2) 安装 fail2ban"
+    echo "  3) 配置 DNS over TLS"
+    echo "  4) 开启自动安全更新"
+    echo "  5) 全部执行"
+    echo "  0) 返回"
+    read -p "  选择 [0-5]: " opt
+    case $opt in
+        1) cat >> /etc/sysctl.d/99-security.conf <<< $'net.ipv4.icmp_echo_ignore_all=1\nnet.ipv6.conf.all.disable_ipv6=1\nnet.ipv4.tcp_timestamps=0'
+           sysctl -p /etc/sysctl.d/99-security.conf &>/dev/null; echo -e "${GREEN}✅ 已禁用 ping / IPv6 / 时间戳${NC}" ;;
+        2) apt-get install -y -qq fail2ban &>/dev/null
+           systemctl restart fail2ban &>/dev/null; echo -e "${GREEN}✅ fail2ban已安装${NC}" ;;
+        3) mkdir -p /etc/systemd/resolved.conf.d
+           printf '[Resolve]\nDNS=1.1.1.1#cloudflare-dns.com 8.8.8.8#dns.google\nDNSOverTLS=yes\nLLMNR=no\nMulticastDNS=no\n' > /etc/systemd/resolved.conf.d/dns-over-tls.conf
+           systemctl restart systemd-resolved &>/dev/null; echo -e "${GREEN}✅ DNS over TLS 已配置${NC}" ;;
+        4) apt-get install -y -qq unattended-upgrades &>/dev/null; echo -e "${GREEN}✅ 自动安全更新已开启${NC}" ;;
+        5) apt-get install -y -qq fail2ban unattended-upgrades &>/dev/null
+           cat >> /etc/sysctl.d/99-security.conf <<< $'net.ipv4.icmp_echo_ignore_all=1\nnet.ipv6.conf.all.disable_ipv6=1\nnet.ipv4.tcp_timestamps=0\nnet.ipv4.conf.all.rp_filter=1\nnet.ipv4.conf.all.accept_redirects=0'
+           sysctl -p /etc/sysctl.d/99-security.conf &>/dev/null
+           mkdir -p /etc/systemd/resolved.conf.d
+           printf '[Resolve]\nDNS=1.1.1.1#cloudflare-dns.com 8.8.8.8#dns.google\nDNSOverTLS=yes\nLLMNR=no\nMulticastDNS=no\n' > /etc/systemd/resolved.conf.d/dns-over-tls.conf
+           systemctl restart systemd-resolved &>/dev/null
+           systemctl restart fail2ban &>/dev/null
+           echo -e "${GREEN}✅ 全部安全加固完成${NC}" ;;
+        0) return ;;
+    esac
+    footer
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  5. 服务管理
-# ═══════════════════════════════════════════════════════════════════════════════
-service_menu() {
-    while true; do
-        menu_header
-        echo -e " ${YELLOW}━━━ 服务管理 ━━━${NC}"
-        local services=($(systemctl list-units --type=service --state=running 2>/dev/null | grep 'loaded active' | grep -vE 'systemd|user@|dbus|cron' | awk '{print $1}'))
-        local i=1
-        for s in "${services[@]}"; do
-            local desc=""
-            case $s in
-                xray*) desc="Reality 代理";; sing-box*) desc="Sing-box 代理";; 
-                nginx*) desc="Web 服务器";; fail2ban*) desc="SSH 防护";;
-                ssh*) desc="SSH";; docker*) desc="Docker 引擎";;
-                komari*) desc="监控探针";; *) desc="";;
-            esac
-            echo "  $i) $s${desc:+ — $desc}"
-            ((i++))
-        done
-        echo "  0) 返回"
-        read -p "  选服务编号查看状态 [0-$((i-1))]: " opt
-        [[ "$opt" == "0" ]] && break
-        local idx=$((opt-1))
-        local svc="${services[$idx]}"
-        [[ -z "$svc" ]] && continue
-        systemctl status "$svc" --no-pager -n 10 2>/dev/null | head -15
-        echo ""
-        read -p "  [r]重启 [s]停止 [q]退出: " action
-        case $action in
-            r) systemctl restart "$svc" 2>/dev/null && echo -e "${GREEN}已重启${NC}" ;;
-            s) systemctl stop "$svc" 2>/dev/null && echo -e "${GREEN}已停止${NC}" ;;
-        esac
-        menu_footer
-    done
+# ── 5. 系统清理 ──────────────────────────────────────────────────────────────
+clean_up() {
+    header
+    echo -e " ${CYAN}—————————————————— 系统清理 ——————————————————${NC}"
+    echo "  1) 清理 apt 缓存"
+    echo "  2) 清理旧内核"
+    echo "  3) 清理 journal 日志"
+    echo "  4) 全部清理"
+    echo "  0) 返回"
+    read -p "  选择 [0-4]: " opt
+    case $opt in
+        1) apt-get clean &>/dev/null; apt autoremove --purge -y &>/dev/null; echo -e "${GREEN}✅ apt已清理${NC}" ;;
+        2) dpkg -l | grep linux-image | grep -v $(uname -r) | awk '{print $2}' | xargs -r dpkg --purge &>/dev/null
+           echo -e "${GREEN}✅ 旧内核已清理${NC}" ;;
+        3) journalctl --vacuum-size=50M &>/dev/null; echo -e "${GREEN}✅ journal已清理${NC}" ;;
+        4) apt-get clean &>/dev/null; apt autoremove --purge -y &>/dev/null
+           dpkg -l | grep linux-image | grep -v $(uname -r) | awk '{print $2}' | xargs -r dpkg --purge &>/dev/null
+           journalctl --vacuum-size=50M &>/dev/null
+           rm -rf /tmp/* /var/tmp/* &>/dev/null || true
+           echo -e "${GREEN}✅ 全部清理完成${NC}" ;;
+        0) return ;;
+    esac
+    footer
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  6. 网络工具
-# ═══════════════════════════════════════════════════════════════════════════════
+# ── 6. 网络工具 ──────────────────────────────────────────────────────────────
 net_tools() {
-    menu_header
-    echo -e " ${YELLOW}━━━ 网络工具 ━━━${NC}"
-    echo "  1) 测速（speedtest）"
-    echo "  2) 延迟测试（ping）"
-    echo "  3) 路由追踪（traceroute）"
-    echo "  4) 端口扫描（本机）"
+    header
+    echo -e " ${CYAN}—————————————————— 网络工具 ——————————————————${NC}"
+    echo "  1) 测速 (speedtest)"
+    echo "  2) Ping 测试"
+    echo "  3) 路由追踪"
+    echo "  4) 本机监听端口"
     echo "  5) DNS 泄露检测"
     echo "  0) 返回"
-    read -p "  请选择 [0-5]: " opt
+    read -p "  选择 [0-5]: " opt
     case $opt in
-        1) command -v speedtest-cli &>/dev/null || pip3 install speedtest-cli -q 2>/dev/null
-           speedtest-cli --simple 2>/dev/null || echo -e "${RED}安装失败${NC}" ;;
-        2) read -p "  目标IP/域名: " target
-           ping -c 5 "$target" 2>&1 | tail -3 ;;
-        3) read -p "  目标IP/域名: " target
-           traceroute "$target" 2>&1 | head -15 ;;
-        4) echo "  监听端口:"; ss -tlnp | grep LISTEN | awk '{print "    " $5}' | sort -u ;;
-        5) echo -n "  DNS 出口: "; dig whoami.dns.controld.com +short 2>/dev/null
-           echo -n "  本机 IP: "; curl -4s https://ipinfo.io/ip 2>/dev/null
-           if resolvectl status 2>/dev/null | grep -q DNSOverTLS; then echo -e "\n  DNS 加密: ✅"; fi ;;
+        1) command -v speedtest-cli &>/dev/null || pip3 install speedtest-cli -q &>/dev/null
+           speedtest-cli --simple 2>/dev/null || echo -e "${RED}测速失败${NC}" ;;
+        2) read -p "  目标: " t; ping -c 5 "$t" 2>&1 | tail -3 ;;
+        3) read -p "  目标: " t; traceroute "$t" 2>&1 | head -15 ;;
+        4) echo -e "  ${YELLOW}监听端口:${NC}"
+           ss -tlnp | grep LISTEN | awk '{print "    "$4}' | sort -u ;;
+        5) resolvectl status 2>/dev/null | grep -q DNSOverTLS && echo -e "  ${GREEN}✅ DNS加密${NC}" || echo -e "  ⚠️  DNS未加密"
+           echo -n "  DNS出口: "; dig whoami.dns.controld.com +short 2>/dev/null
+           echo -n "  本机IP:  "; curl -4s https://ipinfo.io/ip 2>/dev/null ;;
     esac
-    menu_footer
+    [[ "$opt" != "0" ]] && { echo ""; read -p "  按回车返回..."; }
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  7. 系统清理
-# ═══════════════════════════════════════════════════════════════════════════════
-clean_system() {
-    menu_header
-    echo -e " ${YELLOW}━━━ 系统清理 ━━━${NC}"
-    echo "  将执行："
-    echo "  • 清理 apt 缓存"
-    echo "  • 清理旧内核"
-    echo "  • 清理 journal 日志（保留 50M）"
-    echo "  • 清理临时文件"
-    echo "  • 删除 shell 历史"
-    if confirm "确认执行？"; then
-        apt-get clean -qq 2>/dev/null
-        apt autoremove --purge -y -qq 2>/dev/null
-        dpkg -l | grep linux-image | grep -v $(uname -r) | awk '{print $2}' | xargs -r dpkg --purge 2>/dev/null
-        journalctl --vacuum-size=50M 2>/dev/null
-        rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
-        rm -f /root/.bash_history /root/.wget-hsts 2>/dev/null || true
-        echo -e "${GREEN}✅ 清理完成！${NC}"
-        echo "  磁盘: $(df -h / | awk 'NR==2{print $3 \"/\" $2}')"
-    fi
-    menu_footer
+# ── 7. 服务状态 ──────────────────────────────────────────────────────────────
+service_status() {
+    header
+    echo -e " ${CYAN}—————————————————— 服务状态 ——————————————————${NC}"
+    local list=($(systemctl list-units --type=service --state=running 2>/dev/null | grep 'loaded active' | grep -vE 'systemd|user@|dbus|cron|resolv|getty|logind|networkd|timesyncd' | awk '{print $1}'))
+    local i=0
+    for s in "${list[@]}"; do
+        local desc=""
+        case $s in xray*) desc="代理";; sing-box*) desc="代理";; nginx*) desc="Web";; fail2ban*) desc="防护";; esac
+        printf "  %2d) %-20s %s\n" $((i+1)) "$s" "${desc:+($desc)}"
+        ((i++))
+    done
+    echo "  0) 返回"
+    read -p "  选择查看状态 [0-${#list[@]}]: " n
+    [[ "$n" == "0" ]] && return
+    local idx=$((n-1))
+    [[ -z "${list[$idx]}" ]] && return
+    systemctl status "${list[$idx]}" --no-pager -n 10 2>/dev/null | head -15
+    echo ""; read -p "  [r]重启 [s]停止 [其他]返回: " a
+    case $a in r) systemctl restart "${list[$idx]}" &>/dev/null && echo "已重启";; s) systemctl stop "${list[$idx]}" &>/dev/null && echo "已停止";; esac
+    footer
+}
+
+# ── 8. 关于 ──────────────────────────────────────────────────────────────────
+about() {
+    header
+    echo -e " ${CYAN}—————————————————— 关于 ——————————————————${NC}"
+    echo "  🇺🇳 Server Pro Menus v1.0"
+    echo "  功能: 系统信息 / 安全检测 / TCP调优"
+    echo "        / 一键加固 / 系统清理 / 网络工具"
+    echo "        / 服务管理"
+    echo ""
+    echo "  GitHub: github.com/hb0219/server-tool"
+    echo "  运行: bash <(curl -sL https://raw.githubusercontent.com/hb0219/server-tool/main/server.sh)"
+    footer
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  主菜单
 # ═══════════════════════════════════════════════════════════════════════════════
-main_menu() {
-    while true; do
-        menu_header
-        echo -e "  ${GREEN}1${NC})  系统信息"
-        echo -e "  ${GREEN}2${NC})  安全检测"
-        echo -e "  ${GREEN}3${NC})  TCP 调优"
-        echo -e "  ${GREEN}4${NC})  一键安全加固"
-        echo -e "  ${GREEN}5${NC})  服务管理"
-        echo -e "  ${GREEN}6${NC})  网络工具"
-        echo -e "  ${GREEN}7${NC})  系统清理"
-        echo -e "  ${GREEN}0${NC})  退出"
-        echo ""
-        read -p "  请选择 [0-7]: " choice
-        case $choice in
-            1) sys_info ;;   2) security_check ;;
-            3) tcp_tune ;;   4) hardening ;;
-            5) service_menu ;; 6) net_tools ;;
-            7) clean_system ;; 0) echo "再见！"; exit ;;
-            *) continue ;;
-        esac
-    done
-}
-
-# ── 启动 ─────────────────────────────────────────────────────────────────────
-check_root
-main_menu
+while true; do
+    header
+    echo -e "  ${GREEN}1${NC})  系统信息"
+    echo -e "  ${GREEN}2${NC})  安全检测"
+    echo -e "  ${GREEN}3${NC})  TCP 调优"
+    echo -e "  ${GREEN}4${NC})  一键加固"
+    echo -e "  ${GREEN}5${NC})  系统清理"
+    echo -e "  ${GREEN}6${NC})  网络工具"
+    echo -e "  ${GREEN}7${NC})  服务状态"
+    echo -e "  ${GREEN}8${NC})  关于"
+    echo -e "  ${GREEN}0${NC})  退出"
+    echo ""
+    read -p "  请输入数字选择 [0-8]: " ch
+    case $ch in
+        1) sys_info ;; 2) security ;; 3) tcp_tune ;;
+        4) hardening ;; 5) clean_up ;; 6) net_tools ;;
+        7) service_status ;; 8) about ;;
+        0) echo "  再见！"; exit ;;
+        *) continue ;;
+    esac
+done
