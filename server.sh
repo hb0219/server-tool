@@ -24,7 +24,7 @@ ssh_port() {
 
 # ── 系统信息 ─────────────────────────────────────────────────────────────────
 menu_1() {
-    clear
+    echo ""
     echo -e "${GREEN}━━━━━━━━━━━ 系统信息 ━━━━━━━━━━━━${NC}"
     echo -e "  主机名:    $(hostname)"
     echo -e "  系统版本:  $(. /etc/os-release 2>/dev/null; echo "$PRETTY_NAME")"
@@ -47,7 +47,7 @@ menu_1() {
 
 # ── 安全检测 ─────────────────────────────────────────────────────────────────
 menu_2() {
-    clear
+    echo ""
     echo -e "${GREEN}━━━━━━━━━━━ 安全检测 ━━━━━━━━━━━━${NC}"
     local s=$(ssh_port) n=0
     [[ "$s" != "22" ]] && echo -e "  ✅ SSH端口: $s" || { echo -e "  ⚠️  SSH默认端口22"; ((n++)); }
@@ -65,7 +65,7 @@ menu_2() {
 
 # ── TCP调优 ──────────────────────────────────────────────────────────────────
 menu_3() {
-    clear
+    echo ""
     echo -e "${GREEN}━━━━━━━━━━━ TCP 调优 ━━━━━━━━━━━━${NC}"
     echo -e "  当前: $(sysctl net.ipv4.tcp_congestion_control 2>/dev/null | awk '{print $3}') / $(sysctl net.core.default_qdisc 2>/dev/null | awk '{print $3}')"
     echo ""
@@ -103,7 +103,7 @@ EOT
 
 # ── 一键加固 ─────────────────────────────────────────────────────────────────
 menu_4() {
-    clear
+    echo ""
     echo -e "${GREEN}━━━━━━━━━━━ 一键加固 ━━━━━━━━━━━━${NC}"
     echo "  1) 禁用ping + 关IPv6 + 关时间戳"
     echo "  2) 安装fail2ban"
@@ -133,7 +133,7 @@ menu_4() {
 
 # ── 系统清理 ─────────────────────────────────────────────────────────────────
 menu_5() {
-    clear
+    echo ""
     echo -e "${GREEN}━━━━━━━━━━━ 系统清理 ━━━━━━━━━━━━${NC}"
     echo "  1) 清理apt缓存"
     echo "  2) 清理旧内核"
@@ -156,7 +156,7 @@ menu_5() {
 
 # ── 网络工具 ─────────────────────────────────────────────────────────────────
 menu_6() {
-    clear
+    echo ""
     echo -e "${GREEN}━━━━━━━━━━━ 网络工具 ━━━━━━━━━━━━${NC}"
     echo "  1) 测速"
     echo "  2) Ping测试"
@@ -180,7 +180,7 @@ menu_6() {
 
 # ── 服务状态 ─────────────────────────────────────────────────────────────────
 menu_7() {
-    clear
+    echo ""
     echo -e "${GREEN}━━━━━━━━━━━ 服务状态 ━━━━━━━━━━━━${NC}"
     local list=($(systemctl list-units --type=service --state=running 2>/dev/null | grep 'loaded active' | grep -vE 'systemd|user@|dbus|cron|resolv|getty|logind|networkd|timesyncd' | awk '{print $1}'))
     local i=0
@@ -200,7 +200,7 @@ menu_7() {
 
 # ── 关于 ──────────────────────────────────────────────────────────────────────
 menu_8() {
-    clear
+    echo ""
     echo -e "${GREEN}━━━━━━━━━━━ 关于 ─━━━━━━━━━━━━${NC}"
     echo ""
     echo "  🇺🇳 Server Pro Menus v1.0"
