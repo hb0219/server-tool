@@ -3,10 +3,6 @@
 #  🇺🇳 Server Pro Menus  v1.0  —  多功能 VPS 管理脚本
 #  GitHub: https://github.com/hb0219/server-tool
 #  用法: bash <(curl -sL https://raw.githubusercontent.com/hb0219/server-tool/main/server.sh)
-#===============================================================================
-
-# 强制从终端读取输入（兼容 pipe 和 process substitution）
-exec < /dev/tty 2>/dev/null || true
 
 [[ $EUID -eq 0 ]] || { echo "请用 root 运行"; exit 1; }
 
